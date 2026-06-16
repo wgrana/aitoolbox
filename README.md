@@ -173,7 +173,7 @@ If no detectors are configured for a direction, the app reports that direction a
 
 ## Deployment Direction
 
-The intended deployment model is:
+The deployment model is:
 
 ```text
 GitHub repo
@@ -188,9 +188,34 @@ Container registry
 docker compose pull && docker compose up -d
 ```
 
-Secrets should be supplied by Docker Compose `.env` files, host environment variables, or a secret manager. They should not be baked into the image.
+This repo includes:
 
-Docker files are not currently included. That is a planned next step.
+- `Dockerfile`: production image build for the Next.js app
+- `.dockerignore`: excludes local secrets and build artifacts from image context
+- `.github/workflows/docker.yml`: publishes `ghcr.io/wgrana/aitoolbox`
+- `docker-compose.example.yml`: EC2/server deployment template
+
+The published image is:
+
+```text
+ghcr.io/wgrana/aitoolbox:latest
+```
+
+On a deployment host, copy `docker-compose.example.yml` to `docker-compose.yml`, create a local `.env`, and run:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Update later with:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Secrets should be supplied by Docker Compose `.env` files, host environment variables, or a secret manager. They should not be committed or baked into the image.
 
 ## Non-Goals
 
@@ -200,7 +225,6 @@ Docker files are not currently included. That is a planned next step.
 - No production HR workflow
 - No real resume decisioning
 - No job URL scraping
-- No Docker image yet
 
 ## Tests
 

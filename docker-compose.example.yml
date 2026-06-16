@@ -1,0 +1,9 @@
+services:
+  aitoolbox:
+    image: ghcr.io/wgrana/aitoolbox:latest
+    container_name: aitoolbox
+    ports:
+      - "3002:3000"
+    env_file:
+      - .env
+    restart: unless-stopped

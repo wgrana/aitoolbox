@@ -30,7 +30,6 @@ function createRunMetadata(startedAtMs: number, llmLatencyMs?: number, guardrail
     provider: "openai_compatible" as const,
     baseUrlHost: getBaseUrlHost(),
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-    appMode: process.env.APP_MODE || "local",
     startedAt: new Date(startedAtMs).toISOString(),
     completedAt: new Date(completedAtMs).toISOString(),
     totalLatencyMs: completedAtMs - startedAtMs,

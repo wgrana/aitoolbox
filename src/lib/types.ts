@@ -41,7 +41,6 @@ export type EvaluateResponse = {
     provider: "openai_compatible";
     baseUrlHost?: string;
     model: string;
-    appMode: string;
     startedAt: string;
     completedAt: string;
     totalLatencyMs: number;

@@ -87,6 +87,8 @@ Set an OpenAI or OpenAI-compatible key before running evaluations. If `OPENAI_AP
 
 ## Required Env Vars
 
+For a normal deployment, keep the environment small:
+
 ```env
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -95,11 +97,9 @@ OPENAI_MODEL=gpt-4.1-mini
 AI_GUARD_API_BASE_URL=https://api.zseclipse.net
 AI_GUARD_API_KEY=
 AI_GUARD_POLICY_ID=
-AI_GUARD_PROMPT_DIRECTION=IN
-AI_GUARD_RESPONSE_DIRECTION=OUT
-
-APP_MODE=local
 ```
+
+`OPENAI_BASE_URL` and `OPENAI_MODEL` have defaults, but they are included so the same container can point at OpenAI, LiteLLM, or another OpenAI-compatible provider without a code change.
 
 Secrets belong in `.env` or deployment environment variables. Do not commit `.env`.
 
@@ -161,13 +161,13 @@ The adapter uses DAS/API `execute-policy` with `policyId`, `direction`, and `con
 - `AI_GUARD_API_BASE_URL`
 - `AI_GUARD_API_KEY`
 - `AI_GUARD_POLICY_ID`
-- `AI_GUARD_PROMPT_DIRECTION`
-- `AI_GUARD_RESPONSE_DIRECTION`
 
 Default direction mapping:
 
 - `IN`: request/prompt inspection
 - `OUT`: response/output inspection
+
+Advanced override knobs exist in code for tenant-specific direction mapping, but they are intentionally omitted from the default `.env.example` to keep deployment simple.
 
 If no detectors are configured for a direction, the app reports that direction as `not_inspected` instead of pretending enforcement occurred.
 

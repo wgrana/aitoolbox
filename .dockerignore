@@ -1,0 +1,17 @@
+.git
+.github
+.next
+node_modules
+
+.env
+.env.local
+.env.*.local
+
+output
+tmp
+coverage
+dist
+out
+
+*.log
+.DS_Store

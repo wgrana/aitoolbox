@@ -1,20 +1,42 @@
-# AI Resume Screener: Prompt Injection Demo
+# AI Pen Testing Workbench
 
-Local-first security demo showing how prompt injection inside an untrusted resume can manipulate an AI-assisted screening workflow.
+Security testing labs for real-world AI workflows.
+
+AI Pen Testing Workbench is a local-first demo application for showing how modern AI features can fail when untrusted content is allowed to influence privileged model workflows. The project is designed for live demos, screen recordings, and customer-facing conversations about AI security controls.
+
+The first implemented lab is **AI Resume Screener**, a prompt injection and guardrail enforcement demo. Additional labs are represented in the UI as future work:
+
+- Public Support Bot
+- Data Loss Simulator
+- RAG Poisoning Lab
+- Multimodal Lab
+- Guardrails Sandbox
 
 ## Main Thesis
 
-The security boundary is not the prompt. The model can evaluate, but the application and runtime guardrails must authorize and enforce.
+The security boundary is not the prompt. The model can evaluate, summarize, classify, and recommend, but the application and runtime guardrails must authorize and enforce.
 
-## Project Overview
+## Current Lab: AI Resume Screener
 
-The app demonstrates three maturity levels:
+The Resume Screener lab demonstrates how untrusted candidate-controlled resume content can manipulate or contaminate an AI-assisted evaluation workflow.
 
-- Simple Mode: intentionally vulnerable, accepts model output without runtime guardrail inspection.
-- Enhanced Prompt Mode: separates trusted instructions from untrusted resume content and reduces obvious failures, but remains prompt-only protection with no independent enforcement.
-- AI Guard Mode: uses an external guardrail provider outside the model prompt. It requires AI Guard API environment variables and has no local simulation fallback.
+It includes three maturity levels:
 
-This is a synthetic demo only. It is not a real hiring system.
+- **Simple Mode**: intentionally vulnerable. It trusts model output without runtime guardrail inspection.
+- **Enhanced Prompt Mode**: separates trusted job/rubric instructions from untrusted resume content. It improves behavior but remains prompt-only protection.
+- **AI Guard Mode**: sends untrusted content and model responses through an external guardrail provider before trusting the result.
+
+The lab supports:
+
+- pasted resume text
+- server-side PDF text extraction
+- synthetic clean and malicious resume samples
+- prompt injection score manipulation
+- malicious URL/reference material demos
+- model output vs final application decision separation
+- raw prompt/model/guardrail visibility for demo narration
+
+This is a synthetic security demo. It is not a real hiring system or production HR workflow.
 
 ## Architecture
 
@@ -25,20 +47,20 @@ Browser UI
   v
 Next.js API route
   |
-  +--> Prompt builder
-  |      - simpleResumePrompt
-  |      - enhancedResumePrompt
-  |      - aiGuardResumePrompt
+  +--> Prompt builders
+  |      - Simple Mode
+  |      - Enhanced Prompt Mode
+  |      - AI Guard Mode
   |
-  +--> AI Guard Mode only
-  |      - guardrail provider inspects prompt/resume
-  |      - external AI Guard API/proxy configuration is required
-  |      - zscaler adapter placeholder is ready for real request/response mapping
+  +--> AI Guard Mode
+  |      - prompt stage inspects untrusted resume content
+  |      - response stage inspects raw model output when configured
+  |      - Zscaler AI Guard DAS/API adapter normalizes policy results
   |
-  +--> LLM adapter
-  |      - OpenAI-compatible client
-  |      - OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL
-  |      - requires a configured API key
+  +--> OpenAI-compatible LLM adapter
+  |      - OPENAI_BASE_URL
+  |      - OPENAI_API_KEY
+  |      - OPENAI_MODEL
   |
   +--> Zod validation
   |
@@ -50,7 +72,7 @@ PDF upload
   |
   | POST /api/extract-pdf
   v
-Server-side pdf-parse extraction
+Server-side PDF text extraction
 ```
 
 ## Local Setup
@@ -61,7 +83,7 @@ Create a local environment file:
 cp .env.example .env
 ```
 
-Set an OpenAI or OpenAI-compatible key before running evaluations. If `OPENAI_API_KEY` is empty, the app refuses to run the evaluation instead of creating simulated model results.
+Set an OpenAI or OpenAI-compatible key before running evaluations. If `OPENAI_API_KEY` is empty, the app refuses to run an evaluation instead of creating fake results.
 
 ## Required Env Vars
 
@@ -69,11 +91,17 @@ Set an OpenAI or OpenAI-compatible key before running evaluations. If `OPENAI_AP
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4.1-mini
-AI_GUARD_API_BASE_URL=
+
+AI_GUARD_API_BASE_URL=https://api.zseclipse.net
 AI_GUARD_API_KEY=
 AI_GUARD_POLICY_ID=
+AI_GUARD_PROMPT_DIRECTION=IN
+AI_GUARD_RESPONSE_DIRECTION=OUT
+
 APP_MODE=local
 ```
+
+Secrets belong in `.env` or deployment environment variables. Do not commit `.env`.
 
 ## Run Locally
 
@@ -84,26 +112,35 @@ npm run dev
 
 Open http://localhost:3000.
 
-The UI may load without an API key, but `Run Evaluation` requires a connected OpenAI-compatible API. This keeps the results panels limited to real LLM output and guardrail decisions from the configured runtime.
+For the local demo port used during development:
+
+```bash
+npm run dev -- -H 0.0.0.0 -p 3002
+```
+
+Open http://localhost:3002.
 
 ## Demo Script
 
-1. Load clean resume.
+1. Load the clean resume.
 2. Run Simple Mode.
-3. Observe a reasonable score and interview-style recommendation.
-4. Load obvious injection resume.
+3. Observe a realistic medium/low match.
+4. Load an obvious injection resume.
 5. Run Simple Mode.
-6. Observe inflated or max score and strong interview behavior.
+6. Observe the model being steered into an inflated or max score.
 7. Switch to Enhanced Prompt Mode.
 8. Run again.
-9. Observe improved but prompt-only behavior. The model may report suspicious content, but the app has no external detector or enforcement point in this mode.
-10. Switch to AI Guard Mode.
-11. Run again.
-12. If AI Guard env vars are missing, observe a controlled configuration block. With a real AI Guard API/proxy configured, observe external enforcement outside the model prompt.
+9. Observe better prompt behavior, while noting it is still prompt-only defense.
+10. Load the malicious URL resume.
+11. Run Simple or Enhanced Mode.
+12. Observe the candidate-supplied URL surfaced in model output as reference material.
+13. Switch to AI Guard Mode.
+14. Run malicious samples with a real guardrail policy configured.
+15. Observe whether enforcement happens before the LLM call, after the LLM response, or not at all depending on configured detectors.
 
 ## LiteLLM Migration
 
-No code change should be required. Change only:
+No code change should be required. Change only environment variables:
 
 ```env
 OPENAI_BASE_URL=http://localhost:4000/v1
@@ -111,17 +148,49 @@ OPENAI_MODEL=openai/gpt-4.1-mini
 OPENAI_API_KEY=<litellm-key>
 ```
 
-## Zscaler AI Guard Integration Note
+## Zscaler AI Guard Integration
 
-AI Guard Mode requires external API/proxy configuration and currently routes through:
+AI Guard Mode routes through:
 
 ```text
 src/lib/guardrails/zscalerAiGuard.ts
 ```
 
-The adapter uses DAS/API `execute-policy` with `policyId`, `direction`, and `content`. It reads `AI_GUARD_API_BASE_URL`, `AI_GUARD_API_KEY`, and `AI_GUARD_POLICY_ID`, blocks with a controlled configuration error when missing, and normalizes the AI Guard response for the UI.
+The adapter uses DAS/API `execute-policy` with `policyId`, `direction`, and `content`. It reads:
 
-The default DAS direction mapping is `IN` for request/prompt inspection and `OUT` for response/output inspection, matching the observed `execute-policy` enum behavior. If a tenant or future API contract differs, set `AI_GUARD_PROMPT_DIRECTION` and `AI_GUARD_RESPONSE_DIRECTION` in `.env`.
+- `AI_GUARD_API_BASE_URL`
+- `AI_GUARD_API_KEY`
+- `AI_GUARD_POLICY_ID`
+- `AI_GUARD_PROMPT_DIRECTION`
+- `AI_GUARD_RESPONSE_DIRECTION`
+
+Default direction mapping:
+
+- `IN`: request/prompt inspection
+- `OUT`: response/output inspection
+
+If no detectors are configured for a direction, the app reports that direction as `not_inspected` instead of pretending enforcement occurred.
+
+## Deployment Direction
+
+The intended deployment model is:
+
+```text
+GitHub repo
+  |
+  v
+Docker image build
+  |
+  v
+Container registry
+  |
+  v
+docker compose pull && docker compose up -d
+```
+
+Secrets should be supplied by Docker Compose `.env` files, host environment variables, or a secret manager. They should not be baked into the image.
+
+Docker files are not currently included. That is a planned next step.
 
 ## Non-Goals
 
@@ -129,9 +198,9 @@ The default DAS direction mapping is `IN` for request/prompt inspection and `OUT
 - No authentication
 - No database
 - No production HR workflow
-- No real resume processing
-- No Docker yet
+- No real resume decisioning
 - No job URL scraping
+- No Docker image yet
 
 ## Tests
 
@@ -142,7 +211,7 @@ npm test
 Covered areas:
 
 - Simple Mode final decision pass-through
-- AI Guard configuration block/manual-review behavior
+- AI Guard behavior with configured and missing detectors
 - Zod model output validation
 - PDF upload rejection for non-PDF files
 - PDF extraction error handling

@@ -11,8 +11,8 @@ The security boundary is not the prompt. The model can evaluate, but the applica
 The app demonstrates three maturity levels:
 
 - Simple Mode: intentionally vulnerable, accepts model output without runtime guardrail inspection.
-- Enhanced Prompt Mode: separates trusted instructions from untrusted resume content and warns the model about injection, but remains prompt-only protection.
-- AI Guard Mode: uses a guardrail provider outside the model prompt. The local version uses Mock AI Guard for deterministic prompt-injection detection.
+- Enhanced Prompt Mode: separates trusted instructions from untrusted resume content and reduces obvious failures, but remains prompt-only protection with no independent enforcement.
+- AI Guard Mode: uses an external guardrail provider outside the model prompt. It requires AI Guard API environment variables and has no local simulation fallback.
 
 This is a synthetic demo only. It is not a real hiring system.
 
@@ -32,13 +32,13 @@ Next.js API route
   |
   +--> AI Guard Mode only
   |      - guardrail provider inspects prompt/resume
-  |      - mock provider blocks injected resumes locally
-  |      - zscaler adapter placeholder is ready for real mapping
+  |      - external AI Guard API/proxy configuration is required
+  |      - zscaler adapter placeholder is ready for real request/response mapping
   |
   +--> LLM adapter
   |      - OpenAI-compatible client
   |      - OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL
-  |      - local deterministic fallback when no key is configured
+  |      - requires a configured API key
   |
   +--> Zod validation
   |
@@ -61,7 +61,7 @@ Create a local environment file:
 cp .env.example .env
 ```
 
-Set an OpenAI or OpenAI-compatible key if you want live model calls. If `OPENAI_API_KEY` is empty, the app uses deterministic local demo responses so the workflow remains usable.
+Set an OpenAI or OpenAI-compatible key before running evaluations. If `OPENAI_API_KEY` is empty, the app refuses to run the evaluation instead of creating simulated model results.
 
 ## Required Env Vars
 
@@ -69,7 +69,6 @@ Set an OpenAI or OpenAI-compatible key if you want live model calls. If `OPENAI_
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4.1-mini
-AI_GUARD_MODE=mock
 AI_GUARD_API_BASE_URL=
 AI_GUARD_API_KEY=
 AI_GUARD_POLICY_ID=
@@ -85,6 +84,8 @@ npm run dev
 
 Open http://localhost:3000.
 
+The UI may load without an API key, but `Run Evaluation` requires a connected OpenAI-compatible API. This keeps the results panels limited to real LLM output and guardrail decisions from the configured runtime.
+
 ## Demo Script
 
 1. Load clean resume.
@@ -95,10 +96,10 @@ Open http://localhost:3000.
 6. Observe inflated or max score and strong interview behavior.
 7. Switch to Enhanced Prompt Mode.
 8. Run again.
-9. Observe improved but prompt-only behavior and residual risk messaging.
+9. Observe improved but prompt-only behavior. The model may report suspicious content, but the app has no external detector or enforcement point in this mode.
 10. Switch to AI Guard Mode.
 11. Run again.
-12. Observe Mock AI Guard detection, blocked/manual review decision, and score trusted set to no.
+12. If AI Guard env vars are missing, observe a controlled configuration block. With a real AI Guard API/proxy configured, observe external enforcement outside the model prompt.
 
 ## LiteLLM Migration
 
@@ -112,13 +113,15 @@ OPENAI_API_KEY=<litellm-key>
 
 ## Zscaler AI Guard Integration Note
 
-The local app uses Mock AI Guard. A future real API/proxy/DAS-style integration should complete:
+AI Guard Mode requires external API/proxy configuration and currently routes through:
 
 ```text
 src/lib/guardrails/zscalerAiGuard.ts
 ```
 
-That file intentionally does not invent undocumented request or response contracts. It reads `AI_GUARD_API_BASE_URL`, `AI_GUARD_API_KEY`, and `AI_GUARD_POLICY_ID`, returns controlled configuration errors when missing, and includes TODOs for real request/response mapping.
+The adapter uses DAS/API `execute-policy` with `policyId`, `direction`, and `content`. It reads `AI_GUARD_API_BASE_URL`, `AI_GUARD_API_KEY`, and `AI_GUARD_POLICY_ID`, blocks with a controlled configuration error when missing, and normalizes the AI Guard response for the UI.
+
+The default DAS direction mapping is `IN` for request/prompt inspection and `OUT` for response/output inspection, matching the observed `execute-policy` enum behavior. If a tenant or future API contract differs, set `AI_GUARD_PROMPT_DIRECTION` and `AI_GUARD_RESPONSE_DIRECTION` in `.env`.
 
 ## Non-Goals
 
@@ -138,9 +141,8 @@ npm test
 
 Covered areas:
 
-- Prompt injection phrase detection in Mock AI Guard
 - Simple Mode final decision pass-through
-- AI Guard block/manual-review behavior
+- AI Guard configuration block/manual-review behavior
 - Zod model output validation
 - PDF upload rejection for non-PDF files
 - PDF extraction error handling

@@ -1,6 +1,24 @@
-.next
+# dependencies
 node_modules
-.env
+
+# Next.js build output
+.next
+out
+
+# production/build artifacts
 dist
 coverage
+
+# local env files with secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# generated local demo artifacts
+output
+tmp
+
+# logs and OS/editor noise
 *.log
+.DS_Store

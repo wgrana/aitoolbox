@@ -10,8 +10,8 @@ export type GuardrailInspectionInput = {
 };
 
 export type GuardrailInspectionResult = {
-  provider: "mock" | "zscaler_ai_guard";
-  action: "allowed" | "blocked" | "flagged";
+  provider: "zscaler_ai_guard";
+  action: "allowed" | "blocked" | "flagged" | "not_inspected";
   detections: Array<{
     type: string;
     severity: "info" | "low" | "medium" | "high" | "critical";

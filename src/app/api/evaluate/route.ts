@@ -13,6 +13,32 @@ import {
 
 export const runtime = "nodejs";
 
+function getBaseUrlHost() {
+  const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
+  }
+}
+
+function createRunMetadata(startedAtMs: number, llmLatencyMs?: number, guardrailLatencyMs?: number) {
+  const completedAtMs = Date.now();
+
+  return {
+    provider: "openai_compatible" as const,
+    baseUrlHost: getBaseUrlHost(),
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    appMode: process.env.APP_MODE || "local",
+    startedAt: new Date(startedAtMs).toISOString(),
+    completedAt: new Date(completedAtMs).toISOString(),
+    totalLatencyMs: completedAtMs - startedAtMs,
+    llmLatencyMs,
+    guardrailLatencyMs
+  };
+}
+
 function noGuardrailResult(mode: "simple" | "enhanced"): EvaluateResponse["guardrailResult"] {
   return {
     provider: "none",
@@ -23,6 +49,7 @@ function noGuardrailResult(mode: "simple" | "enhanced"): EvaluateResponse["guard
 }
 
 export async function POST(request: Request) {
+  const startedAtMs = Date.now();
   const body = await request.json().catch(() => null);
   const parsed = evaluateRequestSchema.safeParse(body);
 
@@ -35,6 +62,35 @@ export async function POST(request: Request) {
 
   const input = parsed.data;
   const auditTrail = ["Resume received", "Job posting loaded"];
+
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json(
+      {
+        mode: input.mode,
+        finalDecision: {
+          scoreTrusted: false,
+          finalRecommendation: "manual_review",
+          explanation:
+            "OPENAI_API_KEY is not configured. Connect an OpenAI-compatible AI API before running this demo."
+        },
+        guardrailResult: {
+          provider: "none",
+          promptAction: "not_inspected",
+          responseAction: "not_inspected",
+          detections: []
+        },
+        auditTrail: [
+          ...auditTrail,
+          "Evaluation stopped because no OpenAI-compatible API key is configured"
+        ],
+        runMetadata: createRunMetadata(startedAtMs),
+        raw: {
+          promptSentToModel: buildPrompt(input)
+        }
+      } satisfies EvaluateResponse,
+      { status: 400 }
+    );
+  }
 
   if (input.mode === "simple" || input.mode === "enhanced") {
     auditTrail.push(
@@ -53,6 +109,7 @@ export async function POST(request: Request) {
           explanation: llmResult.error || "Model evaluation failed."
         },
         guardrailResult: noGuardrailResult(input.mode),
+        runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs),
         auditTrail: [...auditTrail, "LLM evaluation failed", "Final decision set to manual review"],
         raw: {
           promptSentToModel: llmResult.prompt,
@@ -78,6 +135,7 @@ export async function POST(request: Request) {
       modelOutput: llmResult.modelOutput,
       finalDecision: modelDrivenDecision(llmResult.modelOutput, input.mode),
       guardrailResult: noGuardrailResult(input.mode),
+      runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs),
       auditTrail,
       raw: {
         promptSentToModel: llmResult.prompt,
@@ -97,11 +155,13 @@ export async function POST(request: Request) {
   };
 
   auditTrail.push("Prompt submitted to guardrail provider");
+  const promptGuardStartedAt = Date.now();
   const promptResult = await provider.inspect({
     stage: "prompt",
-    content: `${prompt}\n\nRAW RESUME CONTENT:\n${input.resumeText}`,
+    content: input.resumeText,
     metadata
   });
+  const promptGuardLatencyMs = Date.now() - promptGuardStartedAt;
   auditTrail.push("Prompt injection detection completed");
 
   if (promptResult.action === "blocked") {
@@ -117,6 +177,7 @@ export async function POST(request: Request) {
         responseAction: "not_inspected",
         detections: promptResult.detections
       },
+      runMetadata: createRunMetadata(startedAtMs, undefined, promptGuardLatencyMs),
       auditTrail,
       raw: {
         promptSentToModel: prompt,
@@ -125,7 +186,13 @@ export async function POST(request: Request) {
     } satisfies EvaluateResponse);
   }
 
-  auditTrail.push(promptResult.action === "flagged" ? "Prompt flagged but evaluation continued" : "Prompt allowed");
+  auditTrail.push(
+    promptResult.action === "flagged"
+      ? "Prompt flagged but evaluation continued"
+      : promptResult.action === "not_inspected"
+        ? "Prompt inspection skipped because no detectors are enabled for that direction"
+        : "Prompt allowed"
+  );
   const llmResult = await evaluateResumeWithLLM(input);
 
   if (!llmResult.modelOutput) {
@@ -142,6 +209,7 @@ export async function POST(request: Request) {
         responseAction: "not_inspected",
         detections: promptResult.detections
       },
+      runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs, promptGuardLatencyMs),
       auditTrail: [...auditTrail, "LLM evaluation failed", "Final decision set to manual review"],
       raw: {
         promptSentToModel: llmResult.prompt,
@@ -153,17 +221,25 @@ export async function POST(request: Request) {
 
   auditTrail.push("LLM evaluation completed");
   auditTrail.push("Response submitted to guardrail provider");
+  const responseGuardStartedAt = Date.now();
   const responseResult = await provider.inspect({
     stage: "response",
     content: llmResult.rawModelResponse || JSON.stringify(llmResult.modelOutput),
     metadata
   });
+  const totalGuardrailLatencyMs = promptGuardLatencyMs + (Date.now() - responseGuardStartedAt);
 
   if (responseResult.action === "blocked") {
     auditTrail.push("Response blocked");
     auditTrail.push("Final decision set to manual review");
   } else {
-    auditTrail.push(responseResult.action === "flagged" ? "Response flagged" : "Response allowed");
+    auditTrail.push(
+      responseResult.action === "flagged"
+        ? "Response flagged"
+        : responseResult.action === "not_inspected"
+          ? "Response inspection skipped because no detectors are enabled for that direction"
+          : "Response allowed"
+    );
     auditTrail.push("Final decision generated");
   }
 
@@ -182,6 +258,7 @@ export async function POST(request: Request) {
       responseAction: responseResult.action,
       detections: [...promptResult.detections, ...responseResult.detections]
     },
+    runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs, totalGuardrailLatencyMs),
     auditTrail,
     raw: {
       promptSentToModel: llmResult.prompt,

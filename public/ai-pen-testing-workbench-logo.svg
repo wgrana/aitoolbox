@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">AI Pen Testing Workbench</title>
+  <desc id="logo-desc">A shield with signal scan lines and AI node connections.</desc>
+  <rect width="48" height="48" rx="10" fill="#ffffff"/>
+  <path d="M24 5.5 38 10.8v10.6c0 9-5.6 16.8-14 21.1-8.4-4.3-14-12.1-14-21.1V10.8L24 5.5Z" fill="#f8fafc" stroke="#172033" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M15.2 20.8h5.4l2.8-5.5 3.7 13 2.2-7.5h3.5" fill="none" stroke="#0f766e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16.4 29.7c2.2 3.2 4.9 5.7 7.6 7.4 3.2-2 6.4-5.1 8.6-9" fill="none" stroke="#dbe3ee" stroke-width="2" stroke-linecap="round"/>
+  <path d="M18.2 13.7h11.4" fill="none" stroke="#dbe3ee" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="15.2" cy="20.8" r="2.1" fill="#0f766e"/>
+  <circle cx="20.6" cy="20.8" r="1.7" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"/>
+  <circle cx="29.3" cy="20.8" r="1.7" fill="#ffffff" stroke="#0f766e" stroke-width="1.7"/>
+  <circle cx="32.8" cy="20.8" r="2.1" fill="#0f766e"/>
+  <circle cx="23.4" cy="15.3" r="2.1" fill="#b45309"/>
+  <circle cx="27.1" cy="28.3" r="2.1" fill="#0f766e"/>
+  <path d="M36.8 8.2 42 6.1M38.9 13.5h5.5M36.8 18.8l5.2 2.1" fill="none" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

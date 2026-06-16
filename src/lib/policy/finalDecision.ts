@@ -8,7 +8,7 @@ export function modelDrivenDecision(
   const explanation =
     mode === "simple"
       ? "Simple Mode accepts the model recommendation without runtime guardrail inspection."
-      : "Enhanced Prompt Mode uses a stronger prompt, but the final decision is still model-driven and prompt-only.";
+      : "Enhanced Prompt Mode may cause the model to notice suspicious content, but there is no independent guardrail inspection or enforcement. The final decision is still model-driven and prompt-only.";
 
   return {
     scoreTrusted: true,
@@ -38,6 +38,8 @@ export function guardedDecision(
   responseResult: GuardrailInspectionResult
 ): FinalDecision {
   const flagged = promptResult.action === "flagged" || responseResult.action === "flagged";
+  const skippedInspection =
+    promptResult.action === "not_inspected" || responseResult.action === "not_inspected";
 
   if (flagged) {
     return {
@@ -53,6 +55,8 @@ export function guardedDecision(
     finalScore: modelOutput.score,
     finalRecommendation: modelOutput.recommendation,
     explanation:
-      "Prompt and response inspections allowed the evaluation. The application still records guardrail checks before accepting the score."
+      skippedInspection
+        ? "Configured guardrail inspections passed, and one direction was not inspected because no detectors are enabled for that direction."
+        : "Prompt and response inspections allowed the evaluation. The application still records guardrail checks before accepting the score."
   };
 }

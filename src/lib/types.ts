@@ -37,10 +37,21 @@ export type FinalDecision = {
 
 export type EvaluateResponse = {
   mode: EvaluationMode;
+  runMetadata?: {
+    provider: "openai_compatible";
+    baseUrlHost?: string;
+    model: string;
+    appMode: string;
+    startedAt: string;
+    completedAt: string;
+    totalLatencyMs: number;
+    llmLatencyMs?: number;
+    guardrailLatencyMs?: number;
+  };
   modelOutput?: ModelOutput;
   finalDecision: FinalDecision;
   guardrailResult?: {
-    provider: "none" | "mock" | "zscaler_ai_guard";
+    provider: "none" | "zscaler_ai_guard";
     promptAction: "allowed" | "blocked" | "flagged" | "not_inspected";
     responseAction: "allowed" | "blocked" | "flagged" | "not_inspected";
     detections: Array<{

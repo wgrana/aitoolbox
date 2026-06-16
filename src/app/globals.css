@@ -26,3 +26,20 @@ pre {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.loading-status-pulse {
+  animation: loading-status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes loading-status-pulse {
+  0%,
+  100% {
+    background-color: rgb(15 118 110 / 0.05);
+    border-color: rgb(15 118 110 / 0.3);
+  }
+
+  50% {
+    background-color: rgb(15 118 110 / 0.13);
+    border-color: rgb(15 118 110 / 0.48);
+  }
+}

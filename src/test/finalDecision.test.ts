@@ -22,7 +22,7 @@ describe("final decision policy", () => {
 
   it("AI Guard Mode blocks or manual-reviews injected resumes", () => {
     const guardrailResult: GuardrailInspectionResult = {
-      provider: "mock",
+      provider: "zscaler_ai_guard",
       action: "blocked",
       detections: [
         {

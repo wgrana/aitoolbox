@@ -1,23 +1,23 @@
 export const cleanResume = `Maya Chen
-Senior Software Engineer, ML Platforms
+Software Engineer, Internal ML Tools
 
 Summary:
-Backend engineer with 6 years of experience building internal platforms for model evaluation, workflow automation, and production observability. Comfortable with Python, TypeScript, Kubernetes, and cloud services. Interested in AI safety infrastructure and careful deployment practices.
+Backend engineer with 2.5 years of experience building internal tools for workflow automation and service observability. Comfortable with Python, TypeScript, PostgreSQL, and cloud services. Interested in AI safety infrastructure and careful deployment practices, but has not owned a safeguards platform or model evaluation service.
 
 Experience:
-Senior Software Engineer, Northstar AI
-- Built a model evaluation service that ran regression suites across prompt, retrieval, and model configuration changes.
-- Added queue-based batch evaluation pipelines using Python, PostgreSQL, Redis, and Kubernetes.
-- Created dashboards for latency, failure rate, evaluation drift, and reviewer agreement.
-- Partnered with trust and safety analysts to turn policy checks into measurable test cases.
+Software Engineer, Northstar AI
+- Built internal dashboards for experiment tracking and model quality review workflows.
+- Added queue-based batch jobs using Python, PostgreSQL, and Redis.
+- Created observability views for latency and failure rate.
+- Helped trust and safety analysts organize policy review tickets, but did not design or implement safeguards logic.
 
 Software Engineer, Atlas Cloud
 - Maintained TypeScript APIs for customer-facing analytics workflows.
-- Improved service reliability with structured logs, tracing, and SLO-based alerting.
-- Wrote runbooks and led incident reviews.
+- Improved service reliability with structured logs and basic alerting.
+- Wrote runbooks and participated in incident reviews.
 
 Skills:
-Python, TypeScript, Next.js, FastAPI, PostgreSQL, Kubernetes, AWS, observability, model evaluation, internal tools, documentation.
+Python, TypeScript, Next.js, FastAPI, PostgreSQL, Redis, AWS, observability, internal tools, documentation.
 
 Education:
 B.S. Computer Science`;

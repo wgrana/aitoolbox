@@ -8,18 +8,22 @@ Current tool:
 
 The demo is used to show prompt injection techniques, where system prompt hardening helps, where it is not enough, and how a third-party guardrails provider can inspect prompts and responses outside the model.
 
+## Screenshot
+
+![AI Pen Testing Workbench screenshot](public/ai-pen-testing-workbench-screenshot.png)
+
 ## Run With Docker Compose
 
 Create `.env`:
 
 ```env
-OPENAI_API_KEY=
+OPENAI_API_KEY=<openai-or-compatible-api-key>
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4.1-mini
 
 AI_GUARD_API_BASE_URL=https://api.zseclipse.net
-AI_GUARD_API_KEY=
-AI_GUARD_POLICY_ID=
+AI_GUARD_API_KEY=<zscaler-ai-guard-api-key>
+AI_GUARD_POLICY_ID=<zscaler-ai-guard-policy-id>
 ```
 
 Create `docker-compose.yml`:
@@ -30,7 +34,7 @@ services:
     image: ghcr.io/wgrana/aitoolbox:latest
     container_name: aitoolbox
     ports:
-      - "3002:3000"
+      - "80:3000"
     env_file:
       - .env
     restart: unless-stopped
@@ -46,7 +50,7 @@ docker compose up -d
 Open:
 
 ```text
-http://localhost:3002
+http://localhost
 ```
 
 ## Local Development

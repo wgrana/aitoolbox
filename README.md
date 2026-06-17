@@ -2,9 +2,10 @@
 
 Work-in-progress demo app for AI security testing.
 
-Current tool:
+Current tools:
 
 - **AI Resume Screener**: grades a submitted resume against a job description and gives hiring guidance.
+- **Public Support Bot**: bank-style support chat used to demo risky customer-facing AI behavior and guardrail inspection.
 
 The demo is used to show prompt injection techniques, where system prompt hardening helps, where it is not enough, and how a third-party guardrails provider can inspect prompts and responses outside the model.
 
@@ -52,27 +53,6 @@ Open:
 ```text
 http://localhost
 ```
-
-## Local Development
-
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:3000
-```
-
-## Notes
-
-- `OPENAI_BASE_URL` can point to OpenAI, LiteLLM, or another OpenAI-compatible endpoint.
-- The app does not generate fake AI evaluation results if the provider is not configured.
-- Do not commit `.env`.
-- This is not a real hiring system.
 
 ## Tests
 

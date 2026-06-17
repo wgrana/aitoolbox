@@ -1,8 +1,10 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { buildAiGuardResumePrompt } from "@/lib/prompts/aiGuardResumePrompt";
+import { buildChasmBankSupportPrompt } from "@/lib/prompts/chasmBankSupportPrompt";
 import { buildEnhancedResumePrompt } from "@/lib/prompts/enhancedResumePrompt";
 import { buildSimpleResumePrompt } from "@/lib/prompts/simpleResumePrompt";
+import type { SupportChatMessage } from "@/lib/supportTypes";
 import {
   type EvaluationMode,
   type ModelOutput,
@@ -17,6 +19,16 @@ type EvaluateWithLLMInput = {
 
 export type LlmEvaluationResult = {
   modelOutput?: ModelOutput;
+  prompt: string;
+  rawModelResponse?: string;
+  error?: string;
+  latencyMs?: number;
+  model?: string;
+  provider?: "openai_compatible";
+};
+
+export type LlmChatResult = {
+  assistantMessage?: string;
   prompt: string;
   rawModelResponse?: string;
   error?: string;
@@ -119,6 +131,63 @@ export async function evaluateResumeWithLLM(
 
     return {
       prompt,
+      error: message,
+      rawModelResponse: error instanceof Error ? error.message : String(error),
+      model,
+      provider: "openai_compatible"
+    };
+  }
+}
+
+export async function chatWithSupportLLM(
+  messages: SupportChatMessage[]
+): Promise<LlmChatResult> {
+  const promptBundle = buildChasmBankSupportPrompt(messages);
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+
+  if (!process.env.OPENAI_API_KEY) {
+    return {
+      prompt: promptBundle.promptForDisplay,
+      error:
+        "OPENAI_API_KEY is not configured. Connect an OpenAI-compatible AI API before running support chat.",
+      model,
+      provider: "openai_compatible"
+    };
+  }
+
+  try {
+    const client = getClient();
+    const startedAt = Date.now();
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [
+        {
+          role: "system",
+          content: promptBundle.systemPrompt
+        },
+        ...messages.map((message) => ({
+          role: message.role,
+          content: message.content
+        }))
+      ],
+      temperature: 0.35
+    });
+    const latencyMs = Date.now() - startedAt;
+    const raw = completion.choices[0]?.message?.content ?? "";
+
+    return {
+      assistantMessage: raw,
+      prompt: promptBundle.promptForDisplay,
+      rawModelResponse: raw,
+      latencyMs,
+      model,
+      provider: "openai_compatible"
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown LLM error.";
+
+    return {
+      prompt: promptBundle.promptForDisplay,
       error: message,
       rawModelResponse: error instanceof Error ? error.message : String(error),
       model,

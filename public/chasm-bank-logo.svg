@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-labelledby="chasm-title chasm-desc">
+  <title id="chasm-title">Chasm Bank</title>
+  <desc id="chasm-desc">An abstract blue octagon bank mark with a vault opening and crossing channels.</desc>
+  <rect width="48" height="48" rx="10" fill="#ffffff"/>
+  <path d="M24 5.5 39.5 14.5v19L24 42.5 8.5 33.5v-19L24 5.5Z" fill="#eff6ff" stroke="#0f3b82" stroke-width="2.1" stroke-linejoin="round"/>
+  <path d="M15 18.2h18M15 29.8h18" fill="none" stroke="#7aa7e8" stroke-width="2" stroke-linecap="round"/>
+  <path d="M17.2 31.2 31.8 16.8M16.4 22.2h15.2c2.3 0 4.1 1.8 4.1 4.1s-1.8 4.1-4.1 4.1H16.4" fill="none" stroke="#1557b0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="24" cy="24" r="5.1" fill="#ffffff" stroke="#0f3b82" stroke-width="2"/>
+  <circle cx="24" cy="24" r="1.8" fill="#1557b0"/>
+  <path d="M24 10.8v4.1M24 33.1v4.1M12.8 24h4.1M31.1 24h4.1" fill="none" stroke="#0f3b82" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

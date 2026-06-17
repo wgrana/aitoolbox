@@ -21,15 +21,16 @@ import { maliciousUrlResume } from "@/data/maliciousUrlResume";
 import { obviousInjectionResume } from "@/data/obviousInjectionResume";
 import { subtleInjectionResume } from "@/data/subtleInjectionResume";
 import type { EvaluateResponse, EvaluationMode } from "@/lib/types";
+import { PublicSupportBot } from "@/components/PublicSupportBot";
 import { WorkbenchLogo } from "@/components/WorkbenchLogo";
 
 const tabs = [
-  "AI Resume Screener",
-  "Public Support Bot",
-  "Data Loss Simulator",
-  "RAG Poisoning Lab",
-  "Multimodal Lab",
-  "Guardrails Sandbox"
+  { id: "resume", label: "AI Resume Screener", enabled: true },
+  { id: "support", label: "Public Support Bot", enabled: true },
+  { id: "data-loss", label: "Data Loss Simulator", enabled: false },
+  { id: "rag", label: "RAG Poisoning Lab", enabled: false },
+  { id: "multimodal", label: "Multimodal Lab", enabled: false },
+  { id: "sandbox", label: "Guardrails Sandbox", enabled: false }
 ];
 
 const modes: Array<{
@@ -147,13 +148,13 @@ function toneForRecommendation(recommendation?: string): "good" | "warn" | "bad"
 }
 
 function formatLatency(value?: number) {
-  if (value === undefined) return "n/a";
+  if (value === undefined) return "Not run yet";
   if (value < 1000) return `${value} ms`;
   return `${(value / 1000).toFixed(2)} s`;
 }
 
 function formatTime(value?: string) {
-  if (!value) return "n/a";
+  if (!value) return "Not run yet";
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -162,6 +163,7 @@ function formatTime(value?: string) {
 }
 
 export function ResumeScreenerApp() {
+  const [activeTab, setActiveTab] = useState("resume");
   const [jobPosting, setJobPosting] = useState(defaultJobPosting);
   const [jobOpen, setJobOpen] = useState(false);
   const [resumeText, setResumeText] = useState(cleanResume);
@@ -239,8 +241,8 @@ export function ResumeScreenerApp() {
   }
 
   return (
-    <main className="min-h-screen bg-wash">
-      <header className="border-b border-line bg-white">
+    <main className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f5f7fb_46%,#eef4f8_100%)]">
+      <header className="border-b border-line bg-white/95">
         <div className="mx-auto max-w-[1440px] px-6 py-5">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -270,25 +272,35 @@ export function ResumeScreenerApp() {
       </header>
 
       <div className="mx-auto max-w-[1440px] px-6 py-4">
-        <nav className="flex gap-2 border-b border-line">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab}
-              disabled={index !== 0}
-              className={`px-4 py-3 text-sm font-semibold ${
-                index === 0
-                  ? "border-b-2 border-teal text-teal"
-                  : "cursor-not-allowed text-slate-400"
-              }`}
-              title={index === 0 ? tab : "Coming soon"}
-            >
-              <span>{tab}</span>
-              {index !== 0 ? <span className="block text-[11px] font-bold uppercase tracking-normal text-slate-400">Coming soon</span> : null}
-            </button>
-          ))}
+        <nav className="rounded-lg border border-line bg-white p-2 shadow-soft" aria-label="Workbench labs">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+            {tabs.map((tab) => {
+              const active = activeTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  disabled={!tab.enabled}
+                  onClick={() => tab.enabled && setActiveTab(tab.id)}
+                  className={`min-h-12 rounded-md border px-3 py-2 text-left text-sm font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal/40 ${
+                    active
+                      ? "border-ink bg-ink text-white shadow-sm"
+                      : tab.enabled
+                        ? "border-transparent bg-white text-slate-700 hover:border-teal/20 hover:bg-teal/5 hover:text-teal"
+                        : "cursor-not-allowed border-transparent bg-slate-50 text-slate-400"
+                  }`}
+                  title={tab.enabled ? tab.label : "Coming soon"}
+                >
+                  <span className="block leading-5">{tab.label}</span>
+                  {!tab.enabled ? <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-normal text-slate-400">Coming soon</span> : null}
+                </button>
+              );
+            })}
+          </div>
         </nav>
 
-        <div className="grid grid-cols-1 gap-5 py-5 xl:grid-cols-[minmax(420px,0.9fr)_minmax(620px,1.1fr)]">
+        {activeTab === "support" ? <PublicSupportBot /> : (
+        <div className="grid grid-cols-1 gap-5 py-5 md:grid-cols-[minmax(340px,0.9fr)_minmax(430px,1.1fr)]">
           <div className="space-y-5">
             <Section
               title="Job Posting"
@@ -517,6 +529,7 @@ export function ResumeScreenerApp() {
             ) : null}
           </div>
         </div>
+        )}
       </div>
     </main>
   );
@@ -626,9 +639,9 @@ function EvaluationLoadingStep({
 function RunMetadataStrip({ result }: { result: EvaluateResponse }) {
   const metadata = result.runMetadata;
   const items = [
-    ["Model", metadata?.model ?? "n/a"],
+    ["Model", metadata?.model ?? "Not run yet"],
     ["Provider", metadata?.provider ?? "openai_compatible"],
-    ["Endpoint", metadata?.baseUrlHost ?? "n/a"],
+    ["Endpoint", metadata?.baseUrlHost ?? "Not run yet"],
     ["LLM", formatLatency(metadata?.llmLatencyMs)],
     ["Guardrail", metadata?.guardrailLatencyMs !== undefined ? formatLatency(metadata.guardrailLatencyMs) : "not run"],
     ["Total", formatLatency(metadata?.totalLatencyMs)]

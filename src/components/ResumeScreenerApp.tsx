@@ -4,17 +4,23 @@ import {
   AlertTriangle,
   BadgeCheck,
   Ban,
+  BriefcaseBusiness,
   CheckCircle2,
   CircleDot,
   Clock,
+  ClipboardCheck,
+  FileText,
   Gauge,
+  Layers3,
   RotateCcw,
+  ScanLine,
   ShieldCheck,
   Upload,
   XCircle
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { cleanResume } from "@/data/cleanResume";
+import { CopyButton } from "@/components/CopyButton";
 import { defaultJobPosting } from "@/data/defaultJobPosting";
 import { hiddenStyleInjectionResume } from "@/data/hiddenStyleInjectionResume";
 import { maliciousUrlResume } from "@/data/maliciousUrlResume";
@@ -63,6 +69,8 @@ const modes: Array<{
   }
 ];
 
+type ResumeThreatScore = NonNullable<EvaluateResponse["guardrailResult"]>["threatScores"][number];
+
 function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "bad" }) {
   const toneClass = {
     neutral: "border-slate-200 bg-slate-50 text-slate-700",
@@ -77,16 +85,25 @@ function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?
 function Section({
   title,
   children,
-  action
+  action,
+  icon: Icon
 }: {
   title: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-panel shadow-soft">
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <h2 className="text-sm font-bold text-ink">{title}</h2>
+    <section className="overflow-hidden rounded-lg border border-line bg-white">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          {Icon ? (
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-line bg-slate-50 text-teal">
+              <Icon className="h-4 w-4" />
+            </span>
+          ) : null}
+          <h2 className="text-sm font-bold text-ink">{title}</h2>
+        </div>
         {action}
       </div>
       <div className="p-4">{children}</div>
@@ -94,10 +111,23 @@ function Section({
   );
 }
 
-function ResultPanel({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function ResultPanel({
+  title,
+  children,
+  action,
+  defaultOpen = true
+}: {
+  title: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
   return (
-    <details open={defaultOpen} className="rounded-lg border border-line bg-white">
-      <summary className="cursor-pointer select-none px-4 py-3 text-sm font-bold text-ink">{title}</summary>
+    <details open={defaultOpen} className="overflow-hidden rounded-lg border border-line bg-white">
+      <summary className="flex cursor-pointer select-none items-center justify-between gap-3 bg-white px-4 py-3 text-sm font-bold text-ink">
+        <span>{title}</span>
+        {action}
+      </summary>
       <div className="border-t border-line p-4">{children}</div>
     </details>
   );
@@ -133,6 +163,28 @@ function LinkifiedText({ text }: { text: string }) {
   );
 }
 
+async function readApiResponse(response: Response) {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+
+  if (contentType.includes("application/json")) {
+    try {
+      return text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(`Server returned invalid JSON for HTTP ${response.status}.`);
+    }
+  }
+
+  const cleanText = text
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  throw new Error(cleanText || `Server returned HTTP ${response.status}.`);
+}
+
 function toneForAction(action?: string) {
   if (action === "blocked") return "bad";
   if (action === "flagged") return "warn";
@@ -145,6 +197,19 @@ function toneForRecommendation(recommendation?: string): "good" | "warn" | "bad"
   if (recommendation === "maybe" || recommendation === "manual_review") return "warn";
   if (recommendation === "interview" || recommendation === "strong_interview") return "good";
   return "warn";
+}
+
+function toneForThreatScore(score: ResumeThreatScore): "neutral" | "good" | "warn" | "bad" {
+  const action = score.action?.toLowerCase() ?? "";
+  if (score.triggered || /block|deny|reject/.test(action)) return "bad";
+  if (/flag|warn|review|detect|alert/.test(action)) return "warn";
+  return score.score === undefined ? "neutral" : "good";
+}
+
+function formatThreatScore(value?: number) {
+  if (value === undefined) return "not returned";
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2);
 }
 
 function formatLatency(value?: number) {
@@ -180,6 +245,27 @@ export function ResumeScreenerApp() {
     return "Zscaler AI Guard - API mode";
   }, [result]);
 
+  function clearEvaluationState() {
+    setResult(null);
+    setError(null);
+  }
+
+  function updateJobPosting(value: string) {
+    setJobPosting(value);
+    clearEvaluationState();
+  }
+
+  function updateResumeText(value: string) {
+    setResumeText(value);
+    setPdfMeta(null);
+    clearEvaluationState();
+  }
+
+  function updateMode(value: EvaluationMode) {
+    setMode(value);
+    clearEvaluationState();
+  }
+
   async function runEvaluation() {
     setLoading(true);
     setError(null);
@@ -191,7 +277,7 @@ export function ResumeScreenerApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobPosting, resumeText, mode })
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok) {
         throw new Error(data.error || "Evaluation failed.");
@@ -220,7 +306,7 @@ export function ResumeScreenerApp() {
         method: "POST",
         body: formData
       });
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok) {
         throw new Error(data.error || "PDF extraction failed.");
@@ -300,25 +386,39 @@ export function ResumeScreenerApp() {
         </nav>
 
         {activeTab === "support" ? <PublicSupportBot /> : (
-        <div className="grid grid-cols-1 gap-5 py-5 md:grid-cols-[minmax(340px,0.9fr)_minmax(430px,1.1fr)]">
-          <div className="space-y-5">
+        <>
+        <ResumeStatusStrip mode={mode} result={result} loading={loading} />
+
+        <div className="grid grid-cols-1 gap-4 py-4 min-[720px]:grid-cols-[minmax(280px,0.9fr)_minmax(340px,1.1fr)] lg:grid-cols-[minmax(340px,0.9fr)_minmax(430px,1.1fr)]">
+          <div className="space-y-4">
             <Section
               title="Job Posting"
+              icon={BriefcaseBusiness}
               action={
                 <button
-                  className="inline-flex items-center gap-2 rounded-md border border-line px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  onClick={() => setJobPosting(defaultJobPosting)}
+                  className="inline-flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-teal/25 hover:bg-teal/5"
+                  onClick={() => updateJobPosting(defaultJobPosting)}
                 >
                   <RotateCcw className="h-4 w-4" />
                   Reset job posting
                 </button>
               }
             >
-              <div className="rounded-md border border-line bg-slate-50 p-3">
+              <div className="overflow-hidden rounded-md border border-line bg-white">
+                <div className="border-b border-line bg-slate-50 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-ink">ClosedAI</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">Safeguards Infrastructure</div>
+                    </div>
+                    <span className="rounded border border-line bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-normal text-slate-500">Open role</span>
+                  </div>
+                </div>
+                <div className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-bold text-ink">ML Infrastructure Engineer, Safeguards</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-500">ClosedAI</div>
+                    <div className="text-base font-bold text-ink">ML Infrastructure Engineer, Safeguards</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">Engineering · Applied Safety Systems</div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <Pill>San Francisco, CA</Pill>
@@ -326,26 +426,28 @@ export function ResumeScreenerApp() {
                     <Pill>Full-time</Pill>
                   </div>
                 </div>
-                <p className="mt-3 text-xs leading-5 text-muted">Own evaluation pipelines, policy enforcement services, and observability for safety-critical model launches.</p>
+                <p className="mt-3 text-sm leading-6 text-slate-700">Own evaluation pipelines, policy enforcement services, and observability for safety-critical model launches.</p>
+                </div>
               </div>
               <button
-                className="mt-3 text-sm font-semibold text-teal"
+                className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-teal"
                 onClick={() => setJobOpen((value) => !value)}
               >
+                <FileText className="h-4 w-4" />
                 {jobOpen ? "Hide job posting editor" : "Edit job posting"}
               </button>
               {jobOpen ? (
                 <textarea
-                  className="mt-3 min-h-[260px] w-full rounded-md border border-line bg-white p-3 text-sm leading-6 outline-none focus:border-teal"
+                  className="mt-3 min-h-[260px] w-full rounded-md border border-line bg-white p-3 text-sm leading-6 outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/10"
                   value={jobPosting}
-                  onChange={(event) => setJobPosting(event.target.value)}
+                  onChange={(event) => updateJobPosting(event.target.value)}
                 />
               ) : null}
             </Section>
 
-            <Section title="Resume Input">
-              <div className="flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <Section title="Resume Input" icon={FileText}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-teal/25 hover:bg-teal/5">
                   <Upload className="h-4 w-4" />
                   {uploading ? "Extracting PDF..." : "Upload PDF into resume text"}
                   <input
@@ -358,31 +460,50 @@ export function ResumeScreenerApp() {
                     }}
                   />
                 </label>
-                {pdfMeta ? <Pill>{pdfMeta}</Pill> : null}
+                <div className="flex flex-wrap gap-2">
+                  {pdfMeta ? <Pill>{pdfMeta}</Pill> : null}
+                  <Pill>{resumeText.trim().length.toLocaleString()} chars</Pill>
+                </div>
               </div>
-              <textarea
-                ref={resumeTextareaRef}
-                className="mt-3 min-h-[420px] w-full rounded-md border border-line bg-white p-3 text-sm leading-6 outline-none focus:border-teal"
-                value={resumeText}
-                onChange={(event) => setResumeText(event.target.value)}
-                placeholder="Paste resume text here"
-              />
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText(cleanResume)}>Load clean resume</button>
-                <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText(obviousInjectionResume)}>Load obvious injection resume</button>
-                <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText(subtleInjectionResume)}>Load subtle injection resume</button>
-                <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText(hiddenStyleInjectionResume)}>Load hidden-style injection resume</button>
-                <button className="rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText(maliciousUrlResume)}>Load malicious URL resume</button>
-                <button className="col-span-2 inline-flex items-center justify-center gap-2 rounded-md border border-line px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={() => setResumeText("")}>
+              <div className="relative mt-3 overflow-hidden rounded-md border border-line bg-white">
+                <div className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal to-transparent ${loading ? "resume-scan-line" : ""}`} />
+                <div className="flex items-center justify-between border-b border-line bg-slate-50 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-normal text-slate-500">
+                    <ScanLine className="h-4 w-4 text-teal" />
+                    Candidate artifact
+                  </div>
+                  <span className="text-xs font-semibold text-slate-500">Untrusted content</span>
+                </div>
+                <textarea
+                  ref={resumeTextareaRef}
+                  className="min-h-[420px] w-full resize-y border-0 bg-white p-3 text-sm leading-6 outline-none focus:ring-0"
+                  value={resumeText}
+                  onChange={(event) => updateResumeText(event.target.value)}
+                  placeholder="Paste resume text here"
+                />
+              </div>
+              <div className="mt-3 rounded-md border border-line bg-slate-50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-bold uppercase tracking-normal text-slate-500">Demo resumes</div>
+                  <Pill tone="warn">Adversarial set</Pill>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                <SampleButton onClick={() => updateResumeText(cleanResume)}>Load clean resume</SampleButton>
+                <SampleButton onClick={() => updateResumeText(obviousInjectionResume)}>Load obvious injection resume</SampleButton>
+                <SampleButton onClick={() => updateResumeText(subtleInjectionResume)}>Load subtle injection resume</SampleButton>
+                <SampleButton onClick={() => updateResumeText(hiddenStyleInjectionResume)}>Load hidden-style injection resume</SampleButton>
+                <SampleButton onClick={() => updateResumeText(maliciousUrlResume)}>Load malicious URL resume</SampleButton>
+                <button className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-800" onClick={() => updateResumeText("")}>
                   <XCircle className="h-4 w-4" />
                   Clear
                 </button>
+                </div>
               </div>
             </Section>
           </div>
 
-          <div className="space-y-5">
-            <Section title="Evaluation">
+          <div className="space-y-4">
+            <Section title="Evaluation" icon={ClipboardCheck}>
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 {modes.map((item) => {
                   const Icon = item.icon;
@@ -390,34 +511,47 @@ export function ResumeScreenerApp() {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setMode(item.id)}
-                      className={`rounded-lg border p-4 text-left transition ${
-                        selected ? "border-teal bg-teal/5 ring-2 ring-teal/15" : "border-line bg-white hover:border-slate-300"
+                      onClick={() => updateMode(item.id)}
+                      className={`relative overflow-hidden rounded-md border p-3 text-left transition ${
+                        selected ? "border-teal bg-teal/5" : "border-line bg-white hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <Icon className={`h-5 w-5 ${selected ? "text-teal" : "text-slate-500"}`} />
+                      <span className={`absolute inset-y-3 left-0 w-1 rounded-r ${selected ? "bg-teal" : "bg-transparent"}`} />
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${selected ? "border-teal/20 bg-white text-teal" : "border-line bg-slate-50 text-slate-500"}`}>
+                          <Icon className="h-4 w-4" />
+                        </span>
                         <Pill tone={item.id === "simple" ? "bad" : item.id === "enhanced" ? "warn" : "good"}>{item.badge}</Pill>
                       </div>
-                      <div className="mt-3 text-sm font-bold text-ink">{item.title}</div>
-                      <p className="mt-2 text-xs leading-5 text-muted">{item.description}</p>
+                      <div className="mt-2 text-sm font-bold text-ink">{item.title}</div>
+                      <p className="mt-1 text-xs leading-5 text-muted">{item.description}</p>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="mt-4 rounded-lg border border-line bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-                {mode === "simple" ? "Simple Mode: The resume injection can manipulate the model into giving a 100/100." : null}
-                {mode === "enhanced" ? "Enhanced Prompt Mode: The model may spot suspicious instructions, but the app has no independent detector or enforcement point." : null}
-                {mode === "ai_guard" ? "AI Guard Mode: Requires external AI Guard API configuration and enforces outside the model prompt." : null}
+              <div className="mt-4 rounded-md border border-line bg-slate-50 px-3 py-2.5 text-sm leading-6 text-slate-700">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-line bg-white text-teal">
+                    <Layers3 className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-normal text-slate-500">Current test path</div>
+                    <p className="mt-1">
+                      {mode === "simple" ? "Simple Mode: The resume injection can manipulate the model into giving a 100/100." : null}
+                      {mode === "enhanced" ? "Enhanced Prompt Mode: The model may spot suspicious instructions, but the app has no independent detector or enforcement point." : null}
+                      {mode === "ai_guard" ? "AI Guard Mode: Requires external AI Guard API configuration and enforces outside the model prompt." : null}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <button
                 onClick={runEvaluation}
                 disabled={loading || !resumeText.trim()}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Gauge className="h-4 w-4" />
+                <Gauge className={`h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
                 {loading ? "Running Evaluation..." : "Run Evaluation"}
               </button>
               {loading ? <EvaluationLoading mode={mode} /> : null}
@@ -427,6 +561,26 @@ export function ResumeScreenerApp() {
             {result ? (
               <div className="space-y-4">
                 <RunMetadataStrip result={result} />
+                <DecisionPathStrip result={result} />
+
+                <ResultPanel title="Guardrail Result">
+                  <div className="space-y-3 text-sm">
+                    <div className="flex flex-wrap gap-2">
+                      <Pill>{guardLabel}</Pill>
+                      {result.mode === "enhanced" ? <Pill tone="warn">Protection: prompt-only</Pill> : null}
+                      <Pill tone={toneForAction(result.guardrailResult?.promptAction)}>Prompt action: {result.guardrailResult?.promptAction ?? "not_inspected"}</Pill>
+                      <Pill tone={toneForAction(result.guardrailResult?.responseAction)}>Response action: {result.guardrailResult?.responseAction ?? "not_inspected"}</Pill>
+                    </div>
+                    <p className="text-muted">
+                      {result.guardrailResult?.provider === "none"
+                        ? "No runtime guardrail inspected this run. The app is showing model output separately from the final decision so the trust boundary is visible."
+                        : "Runtime inspection results are shown here separately from the model recommendation."}
+                    </p>
+                    {result.mode === "ai_guard" ? (
+                      <ThreatScoreList scores={result.guardrailResult?.threatScores ?? []} />
+                    ) : null}
+                  </div>
+                </ResultPanel>
 
                 <ResultPanel title="Model Recommendation">
                   {result.modelOutput ? (
@@ -463,19 +617,16 @@ export function ResumeScreenerApp() {
                   )}
                 </ResultPanel>
 
-                <ResultPanel title="Guardrail Result">
+                <ResultPanel title="Final App Decision">
                   <div className="space-y-3 text-sm">
                     <div className="flex flex-wrap gap-2">
-                      <Pill>{guardLabel}</Pill>
-                      {result.mode === "enhanced" ? <Pill tone="warn">Protection: prompt-only</Pill> : null}
-                      <Pill tone={toneForAction(result.guardrailResult?.promptAction)}>Prompt action: {result.guardrailResult?.promptAction ?? "not_inspected"}</Pill>
-                      <Pill tone={toneForAction(result.guardrailResult?.responseAction)}>Response action: {result.guardrailResult?.responseAction ?? "not_inspected"}</Pill>
+                      <Pill tone={result.finalDecision.scoreTrusted ? "good" : "bad"}>Score trusted: {result.finalDecision.scoreTrusted ? "yes" : "no"}</Pill>
+                      {result.finalDecision.finalScore !== undefined ? <Pill>Final score: {result.finalDecision.finalScore}/100</Pill> : null}
+                      <Pill tone={toneForRecommendation(result.finalDecision.finalRecommendation)}>
+                        {result.finalDecision.finalRecommendation}
+                      </Pill>
                     </div>
-                    <p className="text-muted">
-                      {result.guardrailResult?.provider === "none"
-                        ? "No runtime guardrail inspected this run. The app is showing model output separately from the final decision so the trust boundary is visible."
-                        : "Runtime inspection results are shown here separately from the model recommendation."}
-                    </p>
+                    <p className="text-slate-700"><LinkifiedText text={result.finalDecision.explanation} /></p>
                   </div>
                 </ResultPanel>
 
@@ -500,38 +651,154 @@ export function ResumeScreenerApp() {
                   )}
                 </ResultPanel>
 
-                <ResultPanel title="Final App Decision">
-                  <div className="space-y-3 text-sm">
-                    <div className="flex flex-wrap gap-2">
-                      <Pill tone={result.finalDecision.scoreTrusted ? "good" : "bad"}>Score trusted: {result.finalDecision.scoreTrusted ? "yes" : "no"}</Pill>
-                      {result.finalDecision.finalScore !== undefined ? <Pill>Final score: {result.finalDecision.finalScore}/100</Pill> : null}
-                      <Pill tone={toneForRecommendation(result.finalDecision.finalRecommendation)}>
-                        {result.finalDecision.finalRecommendation}
-                      </Pill>
-                    </div>
-                    <p className="text-slate-700"><LinkifiedText text={result.finalDecision.explanation} /></p>
-                  </div>
-                </ResultPanel>
-
                 <ResultPanel title="Audit Trail">
                   <AuditTimeline result={result} />
                 </ResultPanel>
 
-                <ResultPanel title="What the Model Saw" defaultOpen={false}>
+                <ResultPanel
+                  title="What the Model Saw"
+                  action={<CopyButton value={result.raw?.promptSentToModel} label="Copy prompt" />}
+                  defaultOpen={false}
+                >
                   <pre className="max-h-[460px] overflow-auto rounded-md bg-slate-950 p-4 text-xs leading-5 text-slate-100">{result.raw?.promptSentToModel ?? "No prompt was sent to the model."}</pre>
                 </ResultPanel>
 
-                <ResultPanel title="Raw Model Output" defaultOpen={false}>
+                <ResultPanel
+                  title="Raw Model Output"
+                  action={<CopyButton value={result.raw?.rawModelResponse} label="Copy output" />}
+                  defaultOpen={false}
+                >
                   <pre className="max-h-[360px] overflow-auto rounded-md bg-slate-950 p-4 text-xs leading-5 text-slate-100">{result.raw?.rawModelResponse ?? "No raw model output."}</pre>
                 </ResultPanel>
 
               </div>
-            ) : null}
+            ) : (
+              <ResumeEmptyState mode={mode} resumeText={resumeText} />
+            )}
           </div>
         </div>
+        </>
         )}
       </div>
     </main>
+  );
+}
+
+function ResumeStatusStrip({
+  loading,
+  mode,
+  result
+}: {
+  loading: boolean;
+  mode: EvaluationMode;
+  result: EvaluateResponse | null;
+}) {
+  const modeLabel = modes.find((item) => item.id === mode)?.title ?? "Simple Mode";
+  const finalLabel = result?.finalDecision.finalRecommendation ?? "Awaiting run";
+  const trustLabel = result ? (result.finalDecision.scoreTrusted ? "Score trusted" : "Score not trusted") : "No decision yet";
+
+  return (
+    <section className="mt-4 rounded-lg border border-line bg-white px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-slate-50 text-teal">
+            <ScanLine className={`h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+          </span>
+          <div>
+            <div className="text-sm font-bold text-ink">Resume Screener Lab</div>
+            <div className="mt-0.5 text-xs text-muted">Untrusted resume content flows through the model, then the app decides what to trust.</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <CompactFact icon={Layers3} label="Mode" value={modeLabel} active={loading} />
+          <CompactFact icon={ShieldCheck} label="Trust" value={trustLabel} />
+          <CompactFact icon={ClipboardCheck} label="Outcome" value={finalLabel} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CompactFact({
+  active = false,
+  icon: Icon,
+  label,
+  value
+}: {
+  active?: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={`inline-flex max-w-[220px] items-center gap-2 rounded-md border border-line bg-slate-50 px-2.5 py-1.5 text-xs ${active ? "loading-status-pulse" : ""}`}>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+      <span className="font-bold uppercase tracking-normal text-slate-400">{label}</span>
+      <span className="truncate font-semibold text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function SampleButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      className="rounded-md border border-line bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-teal/25 hover:bg-teal/5"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ResumeEmptyState({ mode, resumeText }: { mode: EvaluationMode; resumeText: string }) {
+  const selectedMode = modes.find((item) => item.id === mode);
+  const ready = resumeText.trim().length > 0;
+
+  return (
+    <section className="rounded-lg border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-bold text-ink">Ready to evaluate</div>
+          <div className="mt-1 text-xs leading-5 text-muted">
+            {selectedMode?.title ?? "Simple Mode"} selected. {ready ? "Resume text is loaded." : "Add resume text to begin."}
+          </div>
+        </div>
+        <div className="grid min-w-[260px] flex-1 gap-2 sm:grid-cols-3">
+          <EmptyStateStep icon={FileText} label="Input" value={ready ? "Ready" : "Empty"} tone={ready ? "good" : "warn"} />
+          <EmptyStateStep icon={Gauge} label="Model" value="Not run" tone="neutral" />
+          <EmptyStateStep icon={ShieldCheck} label="Boundary" value={mode === "ai_guard" ? "Enabled" : "Prompt layer"} tone={mode === "ai_guard" ? "good" : "warn"} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EmptyStateStep({
+  icon: Icon,
+  label,
+  tone,
+  value
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tone: "good" | "warn" | "neutral";
+  value: string;
+}) {
+  const toneClass = {
+    good: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    warn: "border-yellow-300 bg-yellow-50 text-yellow-900",
+    neutral: "border-line bg-white text-slate-700"
+  }[tone];
+
+  return (
+    <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-normal opacity-75">
+        <Icon className="h-4 w-4" />
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-bold">{value}</div>
+    </div>
   );
 }
 
@@ -542,6 +809,54 @@ function List({ title, items }: { title: string; items: string[] }) {
       <ul className="space-y-1 text-slate-700">
         {items.length ? items.map((item) => <li key={item}>- <LinkifiedText text={item} /></li>) : <li>- None listed</li>}
       </ul>
+    </div>
+  );
+}
+
+function ThreatScoreList({ scores }: { scores: ResumeThreatScore[] }) {
+  return (
+    <div className="rounded-md border border-line bg-slate-50 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-normal text-slate-500">Threat scoring</div>
+        <Pill tone={scores.length ? "good" : "warn"}>{scores.length ? `${scores.length} detector${scores.length === 1 ? "" : "s"}` : "No scores returned"}</Pill>
+      </div>
+      {scores.length ? (
+        <div className="grid gap-2">
+          {scores.map((score, index) => (
+            <ThreatScoreRow key={`${score.name}-${score.location}-${index}`} score={score} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs leading-5 text-muted">
+          AI Guard ran for this mode, but the provider response did not include numeric detector scores.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ThreatScoreRow({ score }: { score: ResumeThreatScore }) {
+  const tone = toneForThreatScore(score);
+
+  return (
+    <div className="rounded-md border border-line bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone={tone}>{score.name}</Pill>
+        <Pill>{score.location}</Pill>
+        {score.action ? <Pill tone={tone}>{score.action}</Pill> : null}
+        {score.triggered !== undefined ? <Pill tone={score.triggered ? "bad" : "good"}>{score.triggered ? "triggered" : "passed"}</Pill> : null}
+      </div>
+      <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+        <div>
+          <span className="font-bold uppercase tracking-normal text-slate-400">Score </span>
+          <span className="font-semibold text-slate-700">{formatThreatScore(score.score)}</span>
+        </div>
+        <div>
+          <span className="font-bold uppercase tracking-normal text-slate-400">Threshold </span>
+          <span className="font-semibold text-slate-700">{formatThreatScore(score.threshold)}</span>
+        </div>
+      </div>
+      {score.explanation ? <p className="mt-2 text-xs leading-5 text-muted">{score.explanation}</p> : null}
     </div>
   );
 }
@@ -576,7 +891,7 @@ function EvaluationLoading({ mode }: { mode: EvaluationMode }) {
   ];
 
   return (
-    <div className="mt-3 overflow-hidden rounded-lg border border-line bg-white px-3 py-2 shadow-soft" role="status" aria-live="polite">
+    <div className="mt-3 overflow-hidden rounded-lg border border-line bg-white px-3 py-2" role="status" aria-live="polite">
       <div className="flex min-w-0 items-center gap-2 text-[11px]">
         <div className="inline-flex shrink-0 items-center gap-1.5 font-bold uppercase tracking-normal text-slate-500">
           <Clock className="h-3.5 w-3.5 animate-pulse text-teal" />
@@ -636,6 +951,94 @@ function EvaluationLoadingStep({
   );
 }
 
+function DecisionPathStrip({ result }: { result: EvaluateResponse }) {
+  const promptAction = result.guardrailResult?.promptAction ?? "not_inspected";
+  const responseAction = result.guardrailResult?.responseAction ?? "not_inspected";
+  const guardrailProvider = result.guardrailResult?.provider ?? "none";
+  const guardrailBlocked = promptAction === "blocked" || responseAction === "blocked";
+  const guardrailFlagged = promptAction === "flagged" || responseAction === "flagged";
+  const guardrailStatus =
+    guardrailProvider === "none"
+      ? "Not inspected"
+      : guardrailBlocked
+        ? promptAction === "blocked"
+          ? "Blocked prompt"
+          : "Blocked response"
+        : guardrailFlagged
+          ? "Flagged"
+          : "Allowed";
+  const guardrailTone = guardrailBlocked ? "bad" : guardrailFlagged || guardrailProvider === "none" ? "warn" : "good";
+  const modelStatus = result.modelOutput
+    ? `${result.modelOutput.score}/100 ${result.modelOutput.recommendation}`
+    : "Skipped or withheld";
+  const modelTone = result.modelOutput ? toneForRecommendation(result.modelOutput.recommendation) : "bad";
+  const appStatus = result.finalDecision.finalRecommendation;
+  const appTone = toneForRecommendation(appStatus);
+
+  return (
+    <div className="rounded-lg border border-line bg-white p-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs font-bold uppercase tracking-normal text-slate-500">Decision path</div>
+        <div className="text-xs font-semibold text-muted">Runtime inspection &gt; model output &gt; app decision</div>
+      </div>
+      <div className="grid gap-2 md:grid-cols-3">
+        <DecisionPathStep
+          detail={guardrailProvider === "none" ? "No external enforcement on this run." : "Policy runs outside the prompt."}
+          label="Runtime layer"
+          status={guardrailStatus}
+          tone={guardrailTone}
+        />
+        <DecisionPathStep
+          detail={result.modelOutput ? "Raw model recommendation is evidence, not authority." : "The model did not produce a trusted recommendation."}
+          label="Model output"
+          status={modelStatus}
+          tone={modelTone}
+        />
+        <DecisionPathStep
+          detail={result.finalDecision.scoreTrusted ? "Application accepted the score." : "Application did not trust the model score."}
+          label="Final app decision"
+          status={appStatus}
+          tone={appTone}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DecisionPathStep({
+  detail,
+  label,
+  status,
+  tone
+}: {
+  detail: string;
+  label: string;
+  status: string;
+  tone: "good" | "warn" | "bad";
+}) {
+  const toneClass = {
+    good: "border-emerald-200 bg-emerald-50",
+    warn: "border-yellow-300 bg-yellow-50",
+    bad: "border-red-200 bg-red-50"
+  }[tone];
+  const dotClass = {
+    good: "bg-emerald-600",
+    warn: "bg-yellow-500",
+    bad: "bg-red-600"
+  }[tone];
+
+  return (
+    <div className={`rounded-md border p-3 ${toneClass}`}>
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+        <span className="text-xs font-bold uppercase tracking-normal text-slate-500">{label}</span>
+      </div>
+      <div className="mt-2 text-sm font-bold text-ink">{status}</div>
+      <div className="mt-1 text-xs leading-5 text-slate-600">{detail}</div>
+    </div>
+  );
+}
+
 function RunMetadataStrip({ result }: { result: EvaluateResponse }) {
   const metadata = result.runMetadata;
   const items = [
@@ -648,7 +1051,7 @@ function RunMetadataStrip({ result }: { result: EvaluateResponse }) {
   ];
 
   return (
-    <div className="rounded-lg border border-line bg-white px-4 py-3 shadow-soft">
+    <div className="rounded-lg border border-line bg-white px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
         <div className="inline-flex items-center gap-2 font-bold uppercase tracking-normal text-slate-500">
           <Clock className="h-4 w-4 text-slate-500" />

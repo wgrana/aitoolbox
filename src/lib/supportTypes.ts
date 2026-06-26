@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GuardrailThreatScore } from "@/lib/guardrails/types";
 
 export const supportChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -20,6 +21,7 @@ export type SupportChatResponse = {
     provider: "none" | "zscaler_ai_guard";
     promptAction: "allowed" | "blocked" | "flagged" | "not_inspected" | "off";
     responseAction: "allowed" | "blocked" | "flagged" | "not_inspected" | "off";
+    threatScores: GuardrailThreatScore[];
     detections: Array<{
       type: string;
       severity: "info" | "low" | "medium" | "high" | "critical";

@@ -94,21 +94,36 @@ export async function evaluateResumeWithLLM(
   try {
     const client = getClient();
     const startedAt = Date.now();
-    const completion = await client.chat.completions.create({
+    const messages = input.mode === "simple"
+      ? [
+          {
+            role: "user" as const,
+            content: prompt
+          }
+        ]
+      : [
+          {
+            role: "system" as const,
+            content: promptBundle.systemPrompt
+          },
+          {
+            role: "user" as const,
+            content: promptBundle.userPrompt
+          }
+        ];
+    const request = {
       model,
-      messages: [
-        {
-          role: "system",
-          content: promptBundle.systemPrompt
-        },
-        {
-          role: "user",
-          content: promptBundle.userPrompt
-        }
-      ],
-      response_format: { type: "json_object" },
+      messages,
       temperature: input.mode === "simple" ? 0.2 : 0
-    });
+    };
+    const completion = await client.chat.completions.create(
+      input.mode === "simple"
+        ? request
+        : {
+            ...request,
+            response_format: { type: "json_object" as const }
+          }
+    );
     const latencyMs = Date.now() - startedAt;
 
     const raw = completion.choices[0]?.message?.content ?? "";

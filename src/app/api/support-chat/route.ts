@@ -31,6 +31,7 @@ export async function POST(request: Request) {
           provider: "none",
           promptAction: "not_inspected",
           responseAction: "not_inspected",
+          threatScores: [],
           detections: []
         }
       },

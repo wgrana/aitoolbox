@@ -1,6 +1,7 @@
 import type {
   GuardrailInspectionInput,
   GuardrailInspectionResult,
+  GuardrailThreatScore,
   GuardrailProvider
 } from "@/lib/guardrails/types";
 
@@ -72,6 +73,7 @@ export function normalizeZscalerResponse(raw: unknown): GuardrailInspectionResul
   return {
     provider: "zscaler_ai_guard",
     action: noDetectors ? "not_inspected" : blocked ? "blocked" : flagged ? "flagged" : "allowed",
+    threatScores: noDetectors ? [] : extractThreatScores(rawRecord),
     detections: apiError && !noDetectors
       ? [
           {
@@ -121,6 +123,82 @@ function readNumber(record: Record<string, unknown>, keys: string[]) {
   }
 
   return undefined;
+}
+
+function readOptionalNumber(record: Record<string, unknown> | undefined, keys: string[]) {
+  if (!record) return undefined;
+  return readNumber(record, keys);
+}
+
+function extractThreatScores(record: Record<string, unknown>): GuardrailThreatScore[] {
+  const detectorScores = extractDetectorResponseScores(record);
+  if (detectorScores.length) return detectorScores;
+
+  const candidates = [
+    record.threatScores,
+    record.detectorScores,
+    record.riskScores,
+    record.scores
+  ].find(Array.isArray) as Array<Record<string, unknown>> | undefined;
+
+  if (!candidates) return [];
+
+  return candidates.map((candidate, index) => {
+    const name = String(candidate.name || candidate.detector || candidate.type || candidate.category || `Detector ${index + 1}`);
+    const score = readNumber(candidate, ["score", "topScore", "threatScore", "riskScore", "confidence"]);
+    const threshold = readNumber(candidate, ["threshold", "blockThreshold", "warnThreshold"]);
+    const action = readString(candidate, ["action", "verdict", "decision", "result"]);
+
+    return {
+      name,
+      score,
+      threshold,
+      action,
+      triggered: typeof candidate.triggered === "boolean" ? candidate.triggered : undefined,
+      severity: normalizeSeverity(candidate.severity),
+      location: normalizeLocation(candidate.location),
+      explanation: String(candidate.explanation || candidate.message || candidate.description || "")
+    };
+  });
+}
+
+function extractDetectorResponseScores(record: Record<string, unknown>): GuardrailThreatScore[] {
+  const detectorResponses =
+    record.detectorResponses && typeof record.detectorResponses === "object"
+      ? record.detectorResponses as Record<string, unknown>
+      : undefined;
+
+  if (!detectorResponses) return [];
+
+  return Object.entries(detectorResponses)
+    .filter(([, detector]) => detector && typeof detector === "object")
+    .map(([name, detector]) => {
+      const detectorRecord = detector as Record<string, unknown>;
+      const details = detectorRecord.details && typeof detectorRecord.details === "object"
+        ? detectorRecord.details as Record<string, unknown>
+        : undefined;
+      const score =
+        readOptionalNumber(details, ["topScore", "score", "threatScore", "riskScore", "confidence"]) ??
+        readNumber(detectorRecord, ["topScore", "score", "threatScore", "riskScore", "confidence"]);
+      const threshold =
+        readOptionalNumber(details, ["threshold", "blockThreshold", "warnThreshold"]) ??
+        readNumber(detectorRecord, ["threshold", "blockThreshold", "warnThreshold"]);
+      const action = readString(detectorRecord, ["action", "verdict", "decision", "result"]);
+      const triggered = typeof detectorRecord.triggered === "boolean" ? detectorRecord.triggered : undefined;
+
+      return {
+        name,
+        score,
+        threshold,
+        action,
+        triggered,
+        severity: normalizeSeverity(detectorRecord.severity),
+        location: normalizeLocation(detectorRecord.location),
+        explanation: score === undefined
+          ? "AI Guard returned this detector without a numeric score."
+          : "AI Guard returned a detector threat score for this content."
+      };
+    });
 }
 
 function extractDetections(record: Record<string, unknown>): GuardrailInspectionResult["detections"] {
@@ -197,6 +275,7 @@ export class ZscalerAiGuardProvider implements GuardrailProvider {
       return {
         provider: "zscaler_ai_guard",
         action: "blocked",
+        threatScores: [],
         detections: [
           {
             type: "guardrail_configuration_error",
@@ -253,6 +332,7 @@ export class ZscalerAiGuardProvider implements GuardrailProvider {
         return {
           provider: "zscaler_ai_guard",
           action: "not_inspected",
+          threatScores: [],
           detections: [],
           raw
         };
@@ -261,6 +341,7 @@ export class ZscalerAiGuardProvider implements GuardrailProvider {
       return {
         provider: "zscaler_ai_guard",
         action: "blocked",
+        threatScores: [],
         detections: [
           {
             type: "ai_guard_api_error",
@@ -276,6 +357,10 @@ export class ZscalerAiGuardProvider implements GuardrailProvider {
     const normalized = normalizeZscalerResponse(raw);
     return {
       ...normalized,
+      threatScores: normalized.threatScores.map((score) => ({
+        ...score,
+        location: input.stage
+      })),
       detections: normalized.detections.map((detection) => ({
         ...detection,
         location: input.stage

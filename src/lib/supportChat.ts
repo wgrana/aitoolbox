@@ -41,6 +41,7 @@ function offGuardrailResult(): SupportChatResponse["guardrailResult"] {
     provider: "none",
     promptAction: "off",
     responseAction: "off",
+    threatScores: [],
     detections: []
   };
 }
@@ -59,6 +60,7 @@ function mergeGuardrailResult(
     provider: promptResult.provider,
     promptAction: promptResult.action,
     responseAction: responseResult?.action ?? "not_inspected",
+    threatScores: [...promptResult.threatScores, ...(responseResult?.threatScores ?? [])],
     detections: [...promptResult.detections, ...(responseResult?.detections ?? [])]
   };
 }
@@ -79,6 +81,7 @@ export async function handleSupportChat(
             provider: "zscaler_ai_guard",
             promptAction: "not_inspected",
             responseAction: "not_inspected",
+            threatScores: [],
             detections: []
           }
         : offGuardrailResult(),

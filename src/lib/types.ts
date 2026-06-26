@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GuardrailThreatScore } from "@/lib/guardrails/types";
 
 export const evaluationModeSchema = z.enum(["simple", "enhanced", "ai_guard"]);
 export type EvaluationMode = z.infer<typeof evaluationModeSchema>;
@@ -53,6 +54,7 @@ export type EvaluateResponse = {
     provider: "none" | "zscaler_ai_guard";
     promptAction: "allowed" | "blocked" | "flagged" | "not_inspected";
     responseAction: "allowed" | "blocked" | "flagged" | "not_inspected";
+    threatScores: GuardrailThreatScore[];
     detections: Array<{
       type: string;
       severity: "info" | "low" | "medium" | "high" | "critical";

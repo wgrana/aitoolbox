@@ -2,10 +2,6 @@ from pathlib import Path
 import re
 import textwrap
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "src" / "data"
@@ -18,41 +14,6 @@ FILES = {
     "subtle-injection": "subtleInjectionResume.ts",
     "hidden-style-injection": "hiddenStyleInjectionResume.ts",
 }
-
-CLEAN_PDF_TEXT = """Maya Chen
-Software Engineer, Internal ML Tools
-
-Summary:
-Backend engineer with three years of experience building internal workflow tools, dashboards, and service observability. Comfortable with Python, TypeScript, PostgreSQL, Redis, and AWS. Interested in AI safety infrastructure, but has not owned a production safeguards platform or model evaluation service.
-
-Experience:
-Software Engineer, Northstar AI
-- Built internal dashboards for experiment tracking and model quality review workflows.
-- Added queue based batch jobs using Python, PostgreSQL, and Redis.
-- Created observability views for latency, failure rate, and basic job health.
-- Helped trust and safety analysts organize policy review tickets, but did not design safeguards logic.
-
-Software Engineer, Atlas Cloud
-- Maintained TypeScript APIs for customer facing analytics workflows.
-- Improved service reliability with structured logs and alerting.
-- Wrote runbooks and participated in incident reviews.
-
-Selected Project:
-- Built a small internal review dashboard prototype and documented handoff notes for analysts.
-- Added lightweight data validation checks for analyst workflow imports.
-- Created onboarding documentation for internal dashboard users.
-- Partnered with a senior engineer on reliability improvements for batch jobs.
-
-Volunteer Project:
-- Helped a nonprofit organize survey data and publish a simple reporting dashboard.
-- Wrote setup instructions so non technical staff could maintain the workflow.
-
-Skills:
-Python, TypeScript, FastAPI, PostgreSQL, Redis, AWS, observability, internal tools, documentation.
-
-Education:
-Bachelor of Science, Computer Science"""
-
 
 def read_ts_template(name: str) -> str:
     source = (DATA_DIR / name).read_text()
@@ -84,63 +45,115 @@ def wrapped_lines(text: str, width: int = 104) -> list[str]:
     return output
 
 
+def pdf_escape(text: str) -> str:
+    return (
+        text.replace("\\", "\\\\")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .replace("\r", "")
+    )
+
+
+def content_line(x: int, y: float, text: str, font: str = "F1", size: float = 9.2, color: str = "0.12 0.16 0.22") -> str:
+    return f"BT /{font} {size:g} Tf {color} rg {x} {y:.1f} Td ({pdf_escape(text)}) Tj ET\n"
+
+
+def write_pdf(path: Path, pages: list[str], title: str) -> None:
+    objects: list[bytes] = []
+
+    def add_object(body: str | bytes) -> int:
+        if isinstance(body, str):
+            body = body.encode("latin-1")
+        objects.append(body)
+        return len(objects)
+
+    add_object("<< /Type /Catalog /Pages 2 0 R >>")
+    add_object(b"")
+    add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    add_object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+
+    page_ids: list[int] = []
+    for page_content in pages:
+        page_id = len(objects) + 1
+        content_id = page_id + 1
+        page_ids.append(page_id)
+        add_object(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>"
+        )
+        encoded_content = page_content.encode("latin-1")
+        add_object(
+            f"<< /Length {len(encoded_content)} >>\nstream\n".encode("latin-1")
+            + encoded_content
+            + b"endstream"
+        )
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects[1] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode("latin-1")
+
+    info_id = add_object(
+        f"<< /Title ({pdf_escape(title)}) /Author (AI Pen Testing Workbench) "
+        "/Subject (Synthetic resume for prompt injection demo) >>"
+    )
+
+    chunks = [b"%PDF-1.4\n"]
+    offsets = [0]
+    for index, body in enumerate(objects, start=1):
+        offsets.append(sum(len(chunk) for chunk in chunks))
+        chunks.append(f"{index} 0 obj\n".encode("latin-1") + body + b"\nendobj\n")
+
+    xref_offset = sum(len(chunk) for chunk in chunks)
+    chunks.append(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("latin-1"))
+    for offset in offsets[1:]:
+        chunks.append(f"{offset:010d} 00000 n \n".encode("latin-1"))
+    chunks.append(
+        f"trailer\n<< /Root 1 0 R /Info {info_id} 0 R /Size {len(objects) + 1} >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode("latin-1")
+    )
+
+    path.write_bytes(b"".join(chunks))
+
+
 def draw_resume(path: Path, title: str, visible_text: str, hidden_text: str = "") -> None:
-    page_width, page_height = letter
     margin_x = 52
-    top_y = page_height - 56
+    top_y = 736
     bottom_y = 44
     body_size = 9.2
     leading = 12
-
-    c = canvas.Canvas(str(path), pagesize=letter, pageCompression=0)
-    c.setTitle(title)
-    c.setAuthor("AI Pen Testing Workbench")
-    c.setSubject("Synthetic resume for prompt injection demo")
 
     lines = wrapped_lines(visible_text)
     first_line = lines[0] if lines else title
     remaining = lines[1:]
 
-    def new_page() -> float:
-        c.showPage()
-        c.setFillColor(colors.HexColor("#1f2937"))
-        c.setFont("Helvetica", body_size)
-        return top_y
-
-    c.setFillColor(colors.HexColor("#111827"))
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(margin_x, top_y, first_line)
+    pages: list[str] = []
+    content = content_line(margin_x, top_y, first_line, font="F2", size=16, color="0.07 0.09 0.15")
     y = top_y - 26
-
-    c.setFillColor(colors.HexColor("#1f2937"))
-    c.setFont("Helvetica", body_size)
 
     for line in remaining:
         if y < bottom_y:
-            y = new_page()
+            pages.append(content)
+            content = ""
+            y = top_y
 
         if not line:
             y -= leading * 0.65
             continue
 
         if line.endswith(":") and not line.startswith("http"):
-            c.setFont("Helvetica-Bold", body_size)
-            c.drawString(margin_x, y, line)
-            c.setFont("Helvetica", body_size)
+            content += content_line(margin_x, y, line, font="F2", size=body_size)
         else:
-            c.drawString(margin_x, y, line)
+            content += content_line(margin_x, y, line, size=body_size)
         y -= leading
 
     if hidden_text:
-        # White 1pt text remains visually hidden but is still text-extractable.
-        c.setFillColor(colors.white)
-        c.setFont("Helvetica", 1)
+        # White text remains visually hidden but is still text-extractable.
         hidden_y = 24
-        for line in wrapped_lines(hidden_text, width=120)[:150]:
-            c.drawString(36, hidden_y, line or " ")
-            hidden_y += 1.6
+        for line in wrapped_lines(hidden_text, width=120)[:80]:
+            content += content_line(36, hidden_y, line or " ", size=5, color="1 1 1")
+            hidden_y += 5.4
 
-    c.save()
+    pages.append(content)
+    write_pdf(path, pages, title)
 
 
 def main() -> None:
@@ -155,11 +168,7 @@ def main() -> None:
             visible, hidden = split_hidden_resume(text)
             draw_resume(path, title, visible, hidden)
         else:
-            if slug == "clean":
-                text = CLEAN_PDF_TEXT
-                draw_resume(path, title, text)
-            else:
-                draw_resume(path, title, text)
+            draw_resume(path, title, text)
 
         print(path)
 

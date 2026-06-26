@@ -127,4 +127,37 @@ describe("Zscaler AI Guard adapter", () => {
       detections: []
     });
   });
+
+  it("extracts detector threat scores even when the policy allows content", () => {
+    const result = normalizeZscalerResponse({
+      statusCode: 200,
+      action: "ALLOW",
+      detectorResponses: {
+        prompt_injection: {
+          action: "ALLOW",
+          triggered: false,
+          severity: "low",
+          details: {
+            topScore: 0.12,
+            threshold: 0.75
+          }
+        }
+      }
+    });
+
+    expect(result).toMatchObject({
+      provider: "zscaler_ai_guard",
+      action: "allowed",
+      threatScores: [
+        {
+          name: "prompt_injection",
+          score: 0.12,
+          threshold: 0.75,
+          triggered: false,
+          location: "prompt"
+        }
+      ]
+    });
+    expect(result.detections).toEqual([]);
+  });
 });

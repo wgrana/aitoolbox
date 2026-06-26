@@ -31,6 +31,15 @@ function guardrailResult(action: GuardrailInspectionResult["action"]): Guardrail
   return {
     provider: "zscaler_ai_guard",
     action,
+    threatScores: [
+      {
+        name: "test_detector",
+        score: action === "blocked" ? 0.94 : 0.08,
+        action,
+        triggered: action === "blocked",
+        location: "prompt"
+      }
+    ],
     detections: action === "blocked"
       ? [
           {

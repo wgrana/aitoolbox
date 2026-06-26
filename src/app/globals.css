@@ -31,6 +31,10 @@ pre {
   animation: loading-status-pulse 1.8s ease-in-out infinite;
 }
 
+.resume-scan-line {
+  animation: resume-scan-line 1.6s ease-in-out infinite;
+}
+
 @keyframes loading-status-pulse {
   0%,
   100% {
@@ -41,5 +45,22 @@ pre {
   50% {
     background-color: rgb(15 118 110 / 0.13);
     border-color: rgb(15 118 110 / 0.48);
+  }
+}
+
+@keyframes resume-scan-line {
+  0% {
+    transform: translateX(-65%);
+    opacity: 0.2;
+  }
+
+  45%,
+  55% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(65%);
+    opacity: 0.2;
   }
 }

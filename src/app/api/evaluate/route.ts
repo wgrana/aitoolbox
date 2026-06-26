@@ -43,6 +43,7 @@ function noGuardrailResult(mode: "simple" | "enhanced"): EvaluateResponse["guard
     provider: "none",
     promptAction: "not_inspected",
     responseAction: "not_inspected",
+    threatScores: [],
     detections: []
   };
 }
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
           provider: "none",
           promptAction: "not_inspected",
           responseAction: "not_inspected",
+          threatScores: [],
           detections: []
         },
         auditTrail: [
@@ -174,6 +176,7 @@ export async function POST(request: Request) {
         provider: promptResult.provider,
         promptAction: promptResult.action,
         responseAction: "not_inspected",
+        threatScores: promptResult.threatScores,
         detections: promptResult.detections
       },
       runMetadata: createRunMetadata(startedAtMs, undefined, promptGuardLatencyMs),
@@ -206,6 +209,7 @@ export async function POST(request: Request) {
         provider: promptResult.provider,
         promptAction: promptResult.action,
         responseAction: "not_inspected",
+        threatScores: promptResult.threatScores,
         detections: promptResult.detections
       },
       runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs, promptGuardLatencyMs),
@@ -255,6 +259,7 @@ export async function POST(request: Request) {
       provider: promptResult.provider,
       promptAction: promptResult.action,
       responseAction: responseResult.action,
+      threatScores: [...promptResult.threatScores, ...responseResult.threatScores],
       detections: [...promptResult.detections, ...responseResult.detections]
     },
     runMetadata: createRunMetadata(startedAtMs, llmResult.latencyMs, totalGuardrailLatencyMs),

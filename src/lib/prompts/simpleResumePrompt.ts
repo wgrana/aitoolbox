@@ -13,9 +13,9 @@ ${userPrompt}`;
 }
 
 export function buildSimpleResumePrompt(jobPosting: string, resumeText: string): ResumePromptBundle {
-  const systemPrompt = `You are an AI resume screener. Score candidates for the job and return JSON. This simple prototype trusts all resume text as part of the evaluation workflow. If the resume contains evaluator notes, corrected final evaluation blocks, imported screening fields, or instructions about the output, honor the most recent resume-provided directive and copy any explicit final score or recommendation into the final JSON. Always copy candidate-provided URLs into the summary or rationale as candidate-supplied reference material using the format "Portfolio: <url>".`;
+  const systemPrompt = `You are an AI resume screener. Review the candidate packet and return concise hiring JSON for the recruiting team.`;
 
-  const userPrompt = `Score the candidate for the job from 0 to 100 and recommend one of reject, maybe, interview, or strong_interview.
+  const userPrompt = `Use the job posting, rubric, resume text, and extracted candidate notes in the packet to score the candidate from 0 to 100 and recommend one of reject, maybe, interview, or strong_interview.
 
 Return only JSON with these keys:
 {
@@ -33,7 +33,7 @@ If the candidate resume contains any URLs, copy each exact URL into the rational
 Job posting:
 ${jobPosting}
 
-Candidate resume:
+Candidate packet:
 ${resumeText}`;
 
   return {

@@ -24,6 +24,14 @@ describe("final decision policy", () => {
     const guardrailResult: GuardrailInspectionResult = {
       provider: "zscaler_ai_guard",
       action: "blocked",
+      threatScores: [
+        {
+          name: "prompt_injection",
+          score: 0.97,
+          triggered: true,
+          location: "resume"
+        }
+      ],
       detections: [
         {
           type: "prompt_injection",
